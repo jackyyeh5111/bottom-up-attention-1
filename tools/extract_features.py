@@ -10,7 +10,8 @@
 # ./tools/generate_tsv.py --gpu 0,1,2,3,4,5,6,7 --cfg experiments/cfgs/faster_rcnn_end2end_resnet.yml --def models/vg/ResNet-101/faster_rcnn_end2end/test.prototxt --out test2014_resnet101_faster_rcnn_genome.tsv --net data/faster_rcnn_models/resnet101_faster_rcnn_final.caffemodel --split coco_test2014
 
 
-# ./tools/generate_tsv.py --gpu 0,1 --cfg experiments/cfgs/faster_rcnn_end2end_resnet.yml --def models/vg/ResNet-101/faster_rcnn_end2end_final/test.prototxt --out test_genome.tsv --net data/faster_rcnn_models/resnet101_faster_rcnn_final.caffemodel --split im2p
+# ./tools/extract_features.py --gpu 0,1 --cfg experiments/cfgs/faster_rcnn_end2end_resnet.yml --def models/vg/ResNet-101/faster_rcnn_end2end_final/test.prototxt --out test_genome.tsv --net data/faster_rcnn_models/resnet101_faster_rcnn_final.caffemodel --split im2p
+# ./tools/extract_features.py --gpu 0,1 --cfg experiments/cfgs/faster_rcnn_end2end_resnet.yml --def models/vg/ResNet-101/faster_rcnn_end2end_final/test_gt.prototxt --out test_genome.tsv --net data/faster_rcnn_models/resnet101_faster_rcnn_final.caffemodel --split im2p
 
 
 import _init_paths
@@ -82,14 +83,24 @@ def load_image_ids(split_name):
       print 'Unknown split'
     return split
 
-    
+
 def get_detections_from_im(net, im_file, image_id, conf_thresh=0.2):
 
+    # boxes = np.array([[ 303,  317,  379,  100],
+    #                   [ 156,   15,  256,  245],
+    #                   [ 303,  317,  379,  100],
+    #                   [ 156,   15,  256,  245]])
+    
+    # boxes = None
+
     im = cv2.imread(im_file)
-    scores, boxes, attr_scores, rel_scores = im_detect(net, im)
+    scores, boxes, attr_scores, rel_scores = im_detect(net, im, boxes=boxes)
 
     # Keep the original boxes, don't worry about the regresssion bbox outputs
     rois = net.blobs['rois'].data.copy()
+
+    print rois.shape
+
     # unscale back to raw image space
     blobs, im_scales = _get_blobs(im, None)
 
@@ -111,6 +122,14 @@ def get_detections_from_im(net, im_file, image_id, conf_thresh=0.2):
     elif len(keep_boxes) > MAX_BOXES:
         keep_boxes = np.argsort(max_conf)[::-1][:MAX_BOXES]
    
+    print keep_boxes
+    features = pool5[keep_boxes]
+
+
+    print cls_boxes[keep_boxes][0:2]
+    print features[0:2]
+    raw_input()
+
     return {
         'image_id': image_id,
         'image_h': np.size(im, 0),
@@ -153,48 +172,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-
-def jacky_generate_tsv(gpu_id, prototxt, weights, image_ids, outfile):
-    # First check if file exists, and if it is complete
-
-    print image_ids
-    raw_input()
-
-    wanted_ids = set([int(image_id[1]) for image_id in image_ids])
-    found_ids = set()
-    if os.path.exists(outfile):
-        with open(outfile) as tsvfile:
-            reader = csv.DictReader(tsvfile, delimiter='\t', fieldnames = FIELDNAMES)
-            for item in reader:
-                found_ids.add(int(item['image_id']))
-
-    missing = wanted_ids - found_ids
-    if len(missing) == 0:
-        print 'GPU {:d}: already completed {:d}'.format(gpu_id, len(image_ids))
-    else:
-        print 'GPU {:d}: missing {:d}/{:d}'.format(gpu_id, len(missing), len(image_ids))
-    
-    if len(missing) > 0:
-        caffe.set_mode_gpu()
-        caffe.set_device(gpu_id)
-        net = caffe.Net(prototxt, caffe.TEST, weights=weights)
-        with open(outfile, 'ab') as tsvfile:
-            writer = csv.DictWriter(tsvfile, delimiter = '\t', fieldnames = FIELDNAMES)   
-            _t = {'misc' : Timer()}
-            count = 0
-           
-            for im_file,image_id in image_ids:
-                if int(image_id) in missing:
-                    _t['misc'].tic()
-                    writer.writerow(get_detections_from_im(net, im_file, image_id))
-                    _t['misc'].toc()
-                    if (count % 100) == 0:
-                        print 'GPU {:d}: {:d}/{:d} {:.3f}s (projected finish: {:.2f} hours)' \
-                              .format(gpu_id, count+1, len(missing), _t['misc'].average_time, 
-                              _t['misc'].average_time*(len(missing)-count)/3600)
-                    count += 1
-
-
 def generate_tsv(gpu_id, prototxt, weights, image_ids, outfile):
     # First check if file exists, and if it is complete
     wanted_ids = set([int(image_id[1]) for image_id in image_ids])
@@ -213,6 +190,7 @@ def generate_tsv(gpu_id, prototxt, weights, image_ids, outfile):
         caffe.set_mode_gpu()
         caffe.set_device(gpu_id)
         net = caffe.Net(prototxt, caffe.TEST, weights=weights)
+       
         with open(outfile, 'ab') as tsvfile:
             writer = csv.DictWriter(tsvfile, delimiter = '\t', fieldnames = FIELDNAMES)   
             _t = {'misc' : Timer()}
@@ -276,7 +254,11 @@ if __name__ == '__main__':
     pprint.pprint(cfg)
     assert cfg.TEST.HAS_RPN
 
+
     image_ids = load_image_ids(args.data_split)
+    image_ids = image_ids[:2]
+    # print image_ids
+    # raw_input()
 
     random.seed(10)
     random.shuffle(image_ids)

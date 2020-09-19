@@ -121,8 +121,24 @@ def im_detect(net, im, boxes=None, force_boxes=False):
         attr_scores (ndarray): R x M array of attribute class scores
     """
     blobs, im_scales = _get_blobs(im, boxes)
+    
+    try:
+        if boxes != None:
+            pass
+    except:
+        force_boxes = True
+        cfg.TEST.HAS_RPN = True
+        print 'hererere'
+        # raw_input()
+
+
     if force_boxes:
         blobs['rois'] = _get_rois_blob(boxes, im_scales)
+
+    # print im_scales
+    # print blobs['rois']
+    # raw_input()
+
 
     # When mapping from image ROIs to feature map ROIs, there's some aliasing
     # (some distinct image ROIs get mapped to the same feature ROI).
@@ -154,6 +170,12 @@ def im_detect(net, im, boxes=None, force_boxes=False):
         forward_kwargs['im_info'] = blobs['im_info'].astype(np.float32, copy=False)
     if force_boxes or not cfg.TEST.HAS_RPN:
         forward_kwargs['rois'] = blobs['rois'].astype(np.float32, copy=False)
+    
+    # print blobs['data'].shape
+    # print blobs['im_info'].shape
+    # print blobs['rois'].shape
+    # raw_input()
+
     blobs_out = net.forward(**forward_kwargs)
 
     if cfg.TEST.HAS_RPN and not force_boxes:

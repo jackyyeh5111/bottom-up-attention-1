@@ -12,8 +12,8 @@ import mmap
 csv.field_size_limit(sys.maxsize)
    
 FIELDNAMES = ['image_id', 'image_w','image_h','num_boxes', 'boxes', 'features']
-infile = '/data/coco/tsv/trainval/karpathy_val_resnet101_faster_rcnn_genome.tsv'
-
+# infile = '/data/coco/tsv/trainval/karpathy_val_resnet101_faster_rcnn_genome.tsv'
+infile = '../test_genome.tsv.0'
 
 
 if __name__ == '__main__':
@@ -30,8 +30,13 @@ if __name__ == '__main__':
             for field in ['boxes', 'features']:
                 item[field] = np.frombuffer(base64.decodestring(item[field]), 
                       dtype=np.float32).reshape((item['num_boxes'],-1))
+
+                # print item.keys()
+                # print item['boxes']
+                # raw_input()
+                
             in_data[item['image_id']] = item
-            break
-    print in_data
+            # break
+    print len(in_data.keys()) # just show the first
 
 
